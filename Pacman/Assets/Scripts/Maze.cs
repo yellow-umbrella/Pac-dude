@@ -12,7 +12,7 @@ public class Maze : MonoBehaviour
     {
         { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
         { -1,  1,  1,  1,  1,  1,  1,  1,  1, -1,  1,  1,  1,  1,  1,  1,  1,  1, -1 },
-        { -1,  1, -1, -1,  1, -1, -1, -1,  1, -1,  1, -1, -1, -1,  1, -1, -1,  1, -1 },
+        { -1, 10, -1, -1,  1, -1, -1, -1,  1, -1,  1, -1, -1, -1,  1, -1, -1, 10, -1 },
         { -1,  1, -1, -1,  1, -1, -1, -1,  1, -1,  1, -1, -1, -1,  1, -1, -1,  1, -1 },
         { -1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, -1 },
         { -1,  1, -1, -1,  1, -1,  1, -1, -1, -1, -1, -1,  1, -1,  1, -1, -1,  1, -1 },
@@ -20,13 +20,13 @@ public class Maze : MonoBehaviour
         { -1, -1, -1, -1,  1, -1, -1, -1,  0, -1,  0, -1, -1, -1,  1, -1, -1, -1, -1 },
         {  0,  0,  0, -1,  1, -1,  0,  0,  0,  0,  0,  0,  0, -1,  1, -1,  0,  0,  0 },
         { -1, -1, -1, -1,  1, -1,  0, -1, -1,  0, -1, -1,  0, -1,  1, -1, -1, -1, -1 },
-        {  0,  0,  0,  0,  1,  0,  0, -1,  0,  0,  0, -1,  0,  0,  1,  0,  0,  0,  0 },
+        {  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0 },
         { -1, -1, -1, -1,  1, -1,  0, -1, -1, -1, -1, -1,  0, -1,  1, -1, -1, -1, -1 },
         {  0,  0,  0, -1,  1, -1,  0,  0,  0,  0,  0,  0,  0, -1,  1, -1,  0,  0,  0 },
         { -1, -1, -1, -1,  1, -1,  0, -1, -1, -1, -1, -1,  0, -1,  1, -1, -1, -1, -1 },
         { -1,  1,  1,  1,  1,  1,  1,  1,  1, -1,  1,  1,  1,  1,  1,  1,  1,  1, -1 },
         { -1,  1, -1, -1,  1, -1, -1, -1,  1, -1,  1, -1, -1, -1,  1, -1, -1,  1, -1 },
-        { -1,  1,  1, -1,  1,  1,  1,  1,  1,  0,  1,  1,  1,  1,  1, -1,  1,  1, -1 },
+        { -1, 10,  1, -1,  1,  1,  1,  1,  1,  0,  1,  1,  1,  1,  1, -1,  1, 10, -1 },
         { -1, -1,  1, -1,  1, -1,  1, -1, -1, -1, -1, -1,  1, -1,  1, -1,  1, -1, -1 },
         { -1,  1,  1,  1,  1, -1,  1,  1,  1, -1,  1,  1,  1, -1,  1,  1,  1,  1, -1 },
         { -1,  1, -1, -1, -1, -1, -1, -1,  1, -1,  1, -1, -1, -1, -1, -1, -1,  1, -1 },
@@ -43,12 +43,15 @@ public class Maze : MonoBehaviour
     [SerializeField] private GameObject dot;
     [SerializeField] private List<Ghost> ghostPrefabs;
     [SerializeField] private PlayerController playerPrefab;
+    [SerializeField] private List<Vector2Int> cellsToGuard;
 
     private List<Ghost> ghosts;
     private PlayerController player;
 
     private int score = 0;
     private int lifes = 3;
+
+    private int maxScore = 0;
 
     private void Start()
     {
@@ -61,22 +64,46 @@ public class Maze : MonoBehaviour
                     mazeObjects[i, j] = Instantiate(wall, transform);
                 } else
                 {
+                    maxScore += maze[i, j];
                     mazeObjects[i, j] = Instantiate(dot, transform);
                     if (maze[i, j] == 0)
                     {
                         mazeObjects[i, j].GetComponent<SpriteRenderer>().sprite = null;
+                    }
+                    if (maze[i, j] > 1)
+                    {
+                        mazeObjects[i, j].GetComponent<SpriteRenderer>().color = Color.red;
                     }
                 }
                 mazeObjects[i, j].transform.localPosition = ((Vector3Int)Coord2LocalPos(new Vector2Int(i, j)));
             }
         }
 
+    }
+
+    public void GenPlayer()
+    {
         player = Instantiate(playerPrefab, transform);
         ghosts = new List<Ghost>();
         foreach (Ghost ghost in ghostPrefabs)
         {
             ghosts.Add(Instantiate(ghost, transform));
         }
+
+    }
+
+    private void Update()
+    {
+        if (score == maxScore)
+        {
+            Debug.Log("Victory!");
+            GameManager.instance.Victory();
+        }
+    }
+
+    public Vector2Int GetCellToGuard()
+    {
+        return Coord2LocalPos(cellsToGuard[Random.Range(0, cellsToGuard.Count)]);
     }
 
     public PlayerController GetPlayer()
@@ -143,6 +170,13 @@ public class Maze : MonoBehaviour
             }
         }
         return Coord2LocalPos(newPos);
+    }
+
+    public Vector2Int FindRandomMove(Vector2Int pos)
+    {
+        pos = LocalPos2Coord(pos);
+        var moves = GetValidMoves(pos);
+        return Coord2LocalPos(moves[Random.Range(0, moves.Count)]);
     }
 
     public Vector2Int FindAStarMove(Vector2Int pos, Vector2Int target)
@@ -217,7 +251,7 @@ public class Maze : MonoBehaviour
         return Coord2LocalPos(cell);
     }
 
-    private int Dist(Vector2Int a, Vector2Int b)
+    public int Dist(Vector2Int a, Vector2Int b)
     {
         return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
     }
@@ -250,9 +284,23 @@ public class Maze : MonoBehaviour
         lifes--;
         if (lifes == 0)
         {
+            GameManager.instance.GameOver();
             Debug.Log("Game over!");
         }
     }
 
+    public Vector2Int GetMazeSize()
+    {
+        return new Vector2Int(N, M);
+    }
 
+    public int GetLifes()
+    {
+        return lifes;
+    }
+
+    public int GetScore()
+    {
+        return score;
+    }
 }

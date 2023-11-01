@@ -9,7 +9,8 @@ public class Ghost : MonoBehaviour
     public enum Movement
     {
         Greedy = 0,
-        AStar = 1
+        AStar = 1,
+        Protective = 2,
     }
 
     [SerializeField] private Vector2Int startCoordinates;
@@ -18,13 +19,19 @@ public class Ghost : MonoBehaviour
 
     private Maze maze;
     private PlayerController player;
-    private bool canMove = true;
+    private bool canMove = false;
+
+    private Vector2Int cellToGuard;
+    private int maxDist = 4;
 
     private void Start()
     {
         maze = transform.parent.gameObject.GetComponent<Maze>();
         player = maze.GetPlayer();
         transform.localPosition = ((Vector3Int)maze.Coord2LocalPos(startCoordinates));
+
+        cellToGuard = maze.GetCellToGuard();
+        StartCoroutine(MoveTimer());
     }
 
     private void Update()
@@ -36,16 +43,29 @@ public class Ghost : MonoBehaviour
             if (currentPos == target)
             {
                 maze.DamagePlayer();
-            } 
-            else if (movement == Movement.Greedy)
-            {
-                Vector2Int newPos = maze.FindGreedyMove(currentPos, target);
-                transform.localPosition = ((Vector3Int)newPos);
             }
-            else if (movement == Movement.AStar)
+            else
             {
-                Vector2Int newPos = maze.FindAStarMove(currentPos, target);
-                transform.localPosition = ((Vector3Int)newPos);
+                Vector2Int newPos = new Vector2Int();
+                switch (movement)
+                {
+                    case Movement.Greedy:
+                        newPos = maze.FindGreedyMove(currentPos, target);
+                    break;
+                    case Movement.AStar:
+                        newPos = maze.FindAStarMove(currentPos, target);
+                    break;
+                    case Movement.Protective:
+                        if (maze.Dist(cellToGuard, currentPos) > maxDist)
+                        {
+                            newPos = maze.FindAStarMove(currentPos, cellToGuard);
+                        } else
+                        {
+                            newPos = maze.FindRandomMove(currentPos);
+                        }
+                    break;
+                }
+                transform.localPosition = ((Vector3Int)newPos);   
             }
             StartCoroutine(MoveTimer());
         }
