@@ -1,6 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using UnityEngine;
+using UnityEngine.SocialPlatforms.Impl;
+using static UnityEngine.GraphicsBuffer;
 
 public class Maze : MonoBehaviour
 {
@@ -37,10 +41,17 @@ public class Maze : MonoBehaviour
 
     [SerializeField] private GameObject wall;
     [SerializeField] private GameObject dot;
+    [SerializeField] private List<Ghost> ghostPrefabs;
+    [SerializeField] private PlayerController playerPrefab;
+
+    private List<Ghost> ghosts;
+    private PlayerController player;
+
+    private int score = 0;
+    private int lifes = 3;
 
     private void Start()
     {
-        float scale = transform.localScale.x;
         for (int i = 0; i < N; i++)
         {
             for (int j = 0; j < M; j++)
@@ -59,41 +70,42 @@ public class Maze : MonoBehaviour
                 mazeObjects[i, j].transform.localPosition = ((Vector3Int)Coord2LocalPos(new Vector2Int(i, j)));
             }
         }
-    }
 
-    public bool CanMove(Vector2Int pos)
-    {
-        pos = LocalPos2Coord(pos);
-        if (maze[pos.x, pos.y] != -1)
+        player = Instantiate(playerPrefab, transform);
+        ghosts = new List<Ghost>();
+        foreach (Ghost ghost in ghostPrefabs)
         {
-            return true;
+            ghosts.Add(Instantiate(ghost, transform));
         }
-        return false;
     }
 
-    public Vector2Int Move(Vector2Int current, Vector2Int pos)
+    public PlayerController GetPlayer()
     {
-        pos = LocalPos2Coord(pos);
-        pos = new Vector2Int((N + pos.x) % N, (M + pos.y) % M);
-        if (maze[pos.x, pos.y] != -1)
-        {
-            return Coord2LocalPos(pos);
-        }
-        return current;
+        return player;
     }
 
-    public int CollectPoints(Vector2Int pos)
+    public Vector2Int MoveLocalPos(Vector2Int currentPos, Vector2Int newPos)
+    {
+        return Coord2LocalPos(MoveCoord(LocalPos2Coord(currentPos), LocalPos2Coord(newPos)));
+    }
+
+    public Vector2Int MoveCoord(Vector2Int currentCoord, Vector2Int newCoord)
+    {
+        newCoord = new Vector2Int((N + newCoord.x) % N, (M + newCoord.y) % M);
+        if (maze[newCoord.x, newCoord.y] != -1)
+        {
+            return newCoord;
+        }
+        return currentCoord;
+    }
+
+    public void CollectPoints(Vector2Int pos)
     {
         pos = LocalPos2Coord(pos);
         int points = maze[pos.x, pos.y];
         maze[pos.x, pos.y] = 0;
         mazeObjects[pos.x, pos.y].GetComponent<SpriteRenderer>().sprite = null;
-        return points;
-    }
-
-    public List<Vector2> FindPath()
-    {
-        return new List<Vector2>();
+        score += points;
     }
 
     public Vector2Int LocalPos2Coord(Vector2Int pos)
@@ -105,4 +117,142 @@ public class Maze : MonoBehaviour
     {
         return new Vector2Int(pos.y, -pos.x);
     }
+
+    public Vector2Int FindGreedyMove(Vector2Int pos, Vector2Int target)
+    {
+        pos = LocalPos2Coord(pos);
+        target = LocalPos2Coord(target);
+        Vector2Int newPos = pos;
+        int minDist = int.MaxValue;
+        List<Vector2Int> moves = new List<Vector2Int>()
+        {
+            new Vector2Int(1, 0),
+            new Vector2Int(-1, 0),
+            new Vector2Int(0, -1),
+            new Vector2Int(0, 1),
+        };
+        foreach (Vector2Int move in moves)
+        {
+            Vector2Int potentialPos = pos + move;
+            potentialPos = MoveCoord(pos, potentialPos);
+            int dist = Dist(target, potentialPos);
+            if (potentialPos != pos && dist < minDist)
+            {
+                minDist = dist;
+                newPos = potentialPos;
+            }
+        }
+        return Coord2LocalPos(newPos);
+    }
+
+    public Vector2Int FindAStarMove(Vector2Int pos, Vector2Int target)
+    {
+        pos = LocalPos2Coord(pos);
+        target = LocalPos2Coord(target);
+
+        SortedDictionary<int, Queue<Vector2Int>> queue = new SortedDictionary<int, Queue<Vector2Int>>()
+        {
+            { 0, new Queue<Vector2Int>() }
+        };
+        queue[0].Enqueue(pos);
+
+        Dictionary<Vector2Int, Vector2Int> cameFrom = new Dictionary<Vector2Int, Vector2Int>();
+
+        bool foundPath = false;
+
+        int[,] cost = new int[N, M];
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < M; j++)
+            {
+                cost[i, j] = int.MaxValue;
+            }
+        }
+        cost[pos.x, pos.y] = 0;
+
+        while (queue.Count > 0)
+        {
+            var first = queue.First();
+            var values = first.Value;
+            Vector2Int current = values.Dequeue();
+            if (values.Count == 0)
+            {
+                queue.Remove(first.Key);
+            }
+
+            if (current == target)
+            {
+                foundPath = true;
+                break;
+            }
+
+            foreach (Vector2Int move in GetValidMoves(current))
+            {
+                int newCost = cost[current.x, current.y] + 1;
+                if (newCost < cost[move.x, move.y])
+                {
+                    cost[move.x, move.y] = newCost;
+                    int priority = newCost + Dist(move, target);
+                    if (!queue.ContainsKey(priority))
+                    {
+                        queue[priority] = new Queue<Vector2Int>();
+                    }
+                    queue[priority].Enqueue(move);
+                    cameFrom[move] = current;
+                }
+            }
+            
+        }
+
+        if (!foundPath)
+        {
+            return Coord2LocalPos(pos);
+        }
+
+        Vector2Int cell = target;
+        while (cameFrom[cell] != pos)
+        {
+            cell = cameFrom[cell];
+        }
+        return Coord2LocalPos(cell);
+    }
+
+    private int Dist(Vector2Int a, Vector2Int b)
+    {
+        return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
+    }
+
+    private List<Vector2Int> GetValidMoves(Vector2Int pos)
+    {
+        List<Vector2Int> moves = new List<Vector2Int>()
+        {
+            new Vector2Int(1, 0),
+            new Vector2Int(-1, 0),
+            new Vector2Int(0, -1),
+            new Vector2Int(0, 1),
+        };
+        List<Vector2Int> res = new List<Vector2Int>();
+
+        foreach (Vector2Int move in moves)
+        {
+            Vector2Int potentialPos = pos + move;
+            potentialPos = MoveCoord(pos, potentialPos);
+            if (potentialPos != pos)
+            {
+                res.Add(potentialPos);
+            }
+        }
+        return res;
+    }
+
+    public void DamagePlayer()
+    {
+        lifes--;
+        if (lifes == 0)
+        {
+            Debug.Log("Game over!");
+        }
+    }
+
+
 }

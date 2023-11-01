@@ -5,12 +5,11 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    [SerializeField] private Maze maze;
     [SerializeField] private Vector2Int startCoordinates;
     [SerializeField] private float timeBetweenMoves;
 
     private PlayerControls playerInput;
-    private int score = 0;
+    private Maze maze;
     private bool canMove = true;
 
     private void Awake()
@@ -21,6 +20,7 @@ public class PlayerController : MonoBehaviour
 
     private void Start()
     {
+        maze = transform.parent.gameObject.GetComponent<Maze>();
         transform.localPosition = ((Vector3Int)maze.Coord2LocalPos(startCoordinates));
     }
 
@@ -31,11 +31,11 @@ public class PlayerController : MonoBehaviour
             Vector2Int currentPos = Vector2Int.RoundToInt(transform.localPosition);
             Vector2Int newPos = Vector2Int.RoundToInt(transform.localPosition) 
                 + GetMovementInput();
-            newPos = maze.Move(currentPos, newPos);
+            newPos = maze.MoveLocalPos(currentPos, newPos);
             if (newPos != currentPos)
             {
                 transform.localPosition = (Vector3Int)newPos;
-                score += maze.CollectPoints(newPos);
+                maze.CollectPoints(newPos);
                 StartCoroutine(MoveTimer());
             }
         }
